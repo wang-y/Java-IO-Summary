@@ -150,3 +150,111 @@ BufferedOutputStream的每一次write其实是将内容写入byte[]，当buffer�
 
 1. BufferedOutputStream在close()时会自动flush 
 2. BufferedOutputStream在不调用close()的情况下，缓冲区不满，又需要把缓冲区的内容写入到文件或通过网络发送到别的机器时，才需要调用flush.
+
+## BufferedStreamDemo
+
+操作实例
+
+## 如何正确的关闭流
+
+在BufferedStreamDemo的代码中，我们关闭流的代码是这样写的。
+
+```java
+finally {
+
+            if( bufferedOutputStream != null ){
+                try {
+                    bufferedOutputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if( bufferedInputStream != null){
+                try {
+                    bufferedInputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if( inputStream != null ){
+                try {
+                    inputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if ( outputStream != null ) {
+                try {
+                    outputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+        }
+```
+
+思考：在处理流关闭完成后，我们还需要关闭节点流吗？
+
+让我们带着问题去看源码： 
+- bufferedOutputStream.close();
+
+```java
+/**
+     * Closes this input stream and releases any system resources
+     * associated with the stream.
+     * Once the stream has been closed, further read(), available(), reset(),
+     * or skip() invocations will throw an IOException.
+     * Closing a previously closed stream has no effect.
+     *
+     * @exception  IOException  if an I/O error occurs.
+     */
+    public void close() throws IOException {
+        byte[] buffer;
+        while ( (buffer = buf) != null) {
+            if (bufUpdater.compareAndSet(this, buffer, null)) {
+                InputStream input = in;
+                in = null;
+                if (input != null)
+                    input.close();
+                return;
+            }
+            // Else retry in case a new buf was CASed in fill()
+        }
+    }
+```
+
+**close()方法的作用**
+
+1. 关闭输入流，并且释放系统资源 
+2. BufferedInputStream装饰一个 InputStream 使之具有缓冲功能，is要关闭只需要调用最终被装饰出的对象的 close()方法即可，因为它最终会调用真正数据源对象的 close()方法。因此，可以只调用外层流的close方法关闭其装饰的内层流。
+
+那么如果我们想逐个关闭流，我们该怎么做？
+
+答案是：先关闭外层流，再关闭内层流。一般情况下是：先打开的后关闭，后打开的先关闭；另一种情况：看依赖关系，如果流a依赖流b，应该先关闭流a，再关闭流b。例如处理流a依赖节点流b，应该先关闭处理流a，再关闭节点流b
+
+看懂了怎么正确的关闭流之后，那么我们就可以优化上面的代码了，只关闭外层的处理流。
+
+```java
+finally {
+
+            if( bufferedOutputStream != null ){
+                try {
+                    bufferedOutputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if( bufferedInputStream != null){
+                try {
+                    bufferedInputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+```
